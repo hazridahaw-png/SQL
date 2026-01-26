@@ -1,4 +1,4 @@
-USE food_tracker;
+USE food_tracker; -- It tells the database server which database to use
 
 CREATE TABLE tags (
     id INT UNSIGNED PRIMARY KEY AUTO_INCREMENT,

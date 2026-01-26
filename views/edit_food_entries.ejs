@@ -48,7 +48,17 @@
                             
                             <div class="mb-3">
                                 <label for="foodName" class="form-label">Food Name</label>
-                                <input type="text" class="form-control" id="foodName" name="foodName" value="<%= foodEntry.foodName %>" required>
+                                <select class="form-select" id="foodName" name="foodName" required>
+                                    <option value="">Select a food...</option>
+                                    <% foods.forEach(function(food) { %>
+                                        <option value="<%= food.name %>" <%= foodEntry.foodName === food.name ? 'selected' : '' %>><%= food.name %></option>
+                                    <% }) %>
+                                </select>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="description" class="form-label">Description (Optional)</label>
+                                <textarea class="form-control" id="description" name="description" rows="3" placeholder="Add notes about ingredients, preparation, etc."><%= foodEntry.description || '' %></textarea>
                             </div>
                             
                             <div class="mb-3">
@@ -63,7 +73,12 @@
                                 </div>
                                 <div class="col-md-6 mb-3">
                                     <label for="unit" class="form-label">Unit</label>
-                                    <input type="text" class="form-control" id="unit" name="unit" value="<%= foodEntry.unit %>" required>
+                                    <select class="form-select" id="unit" name="unit" required>
+                                        <option value="">Select unit...</option>
+                                        <% units.forEach(function(unit) { %>
+                                            <option value="<%= unit.abbreviation %>" <%= foodEntry.unit === unit.abbreviation ? 'selected' : '' %>><%= unit.name %> (<%= unit.abbreviation %>)</option>
+                                        <% }) %>
+                                    </select>
                                 </div>
                             </div>
                             
@@ -86,6 +101,22 @@
                                                 <input class="form-check-input" type="checkbox" name="tags" value="<%= tag.name %>" id="tag-<%= tag.id %>" <%= foodEntry.tags.includes(tag.name) ? 'checked' : '' %>>
                                                 <label class="form-check-label" for="tag-<%= tag.id %>">
                                                     <%= tag.name %>
+                                                </label>
+                                            </div>
+                                        </div>
+                                    <% }) %>
+                                </div>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label class="form-label">Categories</label>
+                                <div class="row">
+                                    <% categories.forEach(function(category) { %>
+                                        <div class="col-md-6">
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" name="categories" value="<%= category.name %>" id="category-<%= category.id %>" <%= foodEntry.categories.includes(category.name) ? 'checked' : '' %>>
+                                                <label class="form-check-label" for="category-<%= category.id %>">
+                                                    <%= category.name %>
                                                 </label>
                                             </div>
                                         </div>

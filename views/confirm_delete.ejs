@@ -50,6 +50,9 @@
                                     <li><strong>Date/Time:</strong> <%= new Date(foodEntry.dateTime).toLocaleString() %></li>
                                     <li><strong>Meal:</strong> <%= foodEntry.meal %></li>
                                     <li><strong>Serving Size:</strong> <%= foodEntry.servingSize %> <%= foodEntry.unit %></li>
+                                    <% if (foodEntry.description) { %>
+                                        <li><strong>Description:</strong> <%= foodEntry.description %></li>
+                                    <% } %>
                                 </ul>
                             </div>
                         </div>
