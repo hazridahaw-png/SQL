@@ -36,11 +36,20 @@ const dbConfig = {
 const dbConnection = mysql2.createPool(dbConfig);
 
 app.get('/food-entries', async function(req, res){
-    const sql = 'SELECT * FROM food_entries'
-    // .query is a way to send SQL commands the database
-    // the return will be array of information
+    const sql = `
+        SELECT fe.*, GROUP_CONCAT(t.name) as tags
+        FROM food_entries fe
+        LEFT JOIN food_entries_tags fet ON fe.id = fet.food_entry_id
+        LEFT JOIN tags t ON fet.tag_id = t.id
+        GROUP BY fe.id
+    `
     const results = await dbConnection.query(sql);
     const rows = results[0];
+    
+    // Convert tags from comma-separated string to array
+    rows.forEach(row => {
+        row.tags = row.tags ? row.tags.split(',') : [];
+    });
    
     res.render('food_entries', {
         foodEntries: rows
@@ -49,22 +58,36 @@ app.get('/food-entries', async function(req, res){
 })
 
 // display the form
-app.get("/food-entries/create", function(req,res){
-
-    res.render('create_food_entries');
+app.get("/food-entries/create", async function(req,res){
+    const [tags] = await dbConnection.execute('SELECT * FROM tags');
+    res.render('create_food_entries', {
+        tags: tags
+    });
 })
 
 // process the form
 app.post('/food-entries/create', async function(req,res){
     const { dateTime, foodName, calories, servingSize, meal, tags, unit} = req.body;
-    const sql = `INSERT INTO food_entries (dateTime, foodName, calories, meal, tags, servingSize, unit)
-       VALUES(?, ?, ?, ?, ?, ?, ?);`
+    const sql = `INSERT INTO food_entries (dateTime, foodName, calories, meal, servingSize, unit)
+       VALUES(?, ?, ?, ?, ?, ?);`
 
-    const values = [dateTime, foodName, calories, meal, JSON.stringify(tags), servingSize, unit ];
+    const values = [dateTime, foodName, calories, meal, servingSize, unit ];
     console.log(values);
-    // dbConnection.execute will run SQL in prepared mode
     const results = await dbConnection.execute(sql, values);
+    const foodEntryId = results[0].insertId;
     console.log(results);
+
+    // Insert tags into junction table
+    if (tags && Array.isArray(tags)) {
+        for (const tagName of tags) {
+            // Get tag_id
+            const [tagRows] = await dbConnection.execute('SELECT id FROM tags WHERE name = ?', [tagName]);
+            if (tagRows.length > 0) {
+                const tagId = tagRows[0].id;
+                await dbConnection.execute('INSERT INTO food_entries_tags (food_entry_id, tag_id) VALUES (?, ?)', [foodEntryId, tagId]);
+            }
+        }
+    }
 
     res.redirect('/food-entries')
 })
@@ -72,12 +95,21 @@ app.post('/food-entries/create', async function(req,res){
 app.get('/food-entries/edit/:foodRecordID', async function(req,res){
     const foodRecordID = req.params.foodRecordID;
     const [foodEntries] = await dbConnection.execute(`
-        SELECT * FROM food_entries WHERE id = ?`, 
+        SELECT fe.*, GROUP_CONCAT(t.name) as tags
+        FROM food_entries fe
+        LEFT JOIN food_entries_tags fet ON fe.id = fet.food_entry_id
+        LEFT JOIN tags t ON fet.tag_id = t.id
+        WHERE fe.id = ?
+        GROUP BY fe.id`, 
     [foodRecordID]);
     const foodEntry = foodEntries[0];
-    foodEntry.tags = JSON.parse(foodEntry.tags);
+    foodEntry.tags = foodEntry.tags ? foodEntry.tags.split(',') : [];
+    
+    const [allTags] = await dbConnection.execute('SELECT * FROM tags');
+    
     res.render('edit_food_entries',{
-        foodEntry
+        foodEntry,
+        tags: allTags
     })
 })
 
@@ -98,7 +130,6 @@ app.post('/food-entries/edit/:foodRecordID', async function(req,res){
                         foodName=?,
                         calories=?,
                         meal=?,
-                        tags=?,
                         servingSize=?,
                         unit=?
                      WHERE id =?;`
@@ -107,7 +138,6 @@ app.post('/food-entries/edit/:foodRecordID', async function(req,res){
         req.body.foodName, 
         req.body.calories,
         req.body.meal,
-        JSON.stringify(req.body.tags),
         req.body.servingSize,
         req.body.unit,
         foodEntryID
@@ -115,6 +145,20 @@ app.post('/food-entries/edit/:foodRecordID', async function(req,res){
     console.log(bindings);
     
     const results = await dbConnection.execute(sql, bindings)
+
+    // Delete old tags
+    await dbConnection.execute('DELETE FROM food_entries_tags WHERE food_entry_id = ?', [foodEntryID]);
+
+    // Insert new tags
+    if (req.body.tags && Array.isArray(req.body.tags)) {
+        for (const tagName of req.body.tags) {
+            const [tagRows] = await dbConnection.execute('SELECT id FROM tags WHERE name = ?', [tagName]);
+            if (tagRows.length > 0) {
+                const tagId = tagRows[0].id;
+                await dbConnection.execute('INSERT INTO food_entries_tags (food_entry_id, tag_id) VALUES (?, ?)', [foodEntryID, tagId]);
+            }
+        }
+    }
 
     res.redirect('/food-entries')
 })
