@@ -5,14 +5,16 @@ const mysql2 = require("mysql2/promise");
 // a template file is a reusable HTML code which express can
 // send back to the client
 const ejs = require("ejs");
-require('dotenv').config();
+require('dotenv').config({ path: './SQL/.env' });
+
+console.log("Application starting...");
 
 const app = express();
 const port = 3000;
 
 // setup EJS
 app.set('view engine', 'ejs'); // tell Express that we are using EJS as the template engine
-app.set('views', './views'); // tell Express where all the templates are
+app.set('views', './SQL/views'); // tell Express where all the templates are
 
 // enable forms processing on the server side
 app.use(express.urlencoded({
@@ -37,7 +39,9 @@ const dbConnection = mysql2.createPool(dbConfig);
 
 app.get('/food-entries', async function(req, res){
     console.log('GET /food-entries - Fetching all food entries');
-    const sql = `
+    const search = req.query.search;
+    console.log('Search term:', search);
+    let sql = `
         SELECT fe.*, 
                GROUP_CONCAT(DISTINCT t.name) as tags,
                GROUP_CONCAT(DISTINCT c.name) as categories
@@ -46,9 +50,17 @@ app.get('/food-entries', async function(req, res){
         LEFT JOIN tags t ON fet.tag_id = t.id
         LEFT JOIN food_entries_categories fec ON fe.id = fec.food_entry_id
         LEFT JOIN categories c ON fec.category_id = c.id
-        GROUP BY fe.id
-    `
-    const results = await dbConnection.query(sql);
+    `;
+    let whereClause = '';
+    let params = [];
+    if (search) {
+        whereClause = 'WHERE fe.foodName LIKE ? OR fe.description LIKE ?';
+        params = [`%${search}%`, `%${search}%`];
+    }
+    sql += whereClause + ' GROUP BY fe.id';
+    console.log('SQL:', sql);
+    console.log('Params:', params);
+    const results = await dbConnection.query(sql, params);
     const rows = results[0];
     
     // Convert tags and categories from comma-separated string to array
@@ -59,7 +71,8 @@ app.get('/food-entries', async function(req, res){
    
     console.log(`Found ${rows.length} food entries`);
     res.render('food_entries', {
-        foodEntries: rows
+        foodEntries: rows,
+        search: search
     })
 
 })
@@ -82,7 +95,16 @@ app.get("/food-entries/create", async function(req,res){
 app.post('/food-entries/create', async function(req,res){
     console.log('POST /food-entries/create - Creating new food entry');
     const { dateTime, foodName, calories, servingSize, meal, tags, unit, description, categories} = req.body;
-    console.log('Received data:', { dateTime, foodName, calories, servingSize, meal, tags, unit });
+    console.log('Received data:', { dateTime, foodName, calories, servingSize, meal, tags, unit, description, categories });
+    console.log('Tags type:', Array.isArray(tags) ? 'array' : typeof tags);
+    console.log('Categories type:', Array.isArray(categories) ? 'array' : typeof categories);
+    
+    // Normalize tags and categories to arrays
+    const tagArray = Array.isArray(tags) ? tags : (tags ? [tags] : []);
+    const categoryArray = Array.isArray(categories) ? categories : (categories ? [categories] : []);
+    
+    console.log('Normalized tags:', tagArray);
+    console.log('Normalized categories:', categoryArray);
     const sql = `INSERT INTO food_entries (dateTime, foodName, calories, meal, servingSize, unit, description)
        VALUES(?, ?, ?, ?, ?, ?, ?);`
 
@@ -93,9 +115,9 @@ app.post('/food-entries/create', async function(req,res){
     console.log(results);
 
     // Insert tags into junction table
-    if (tags && Array.isArray(tags)) {
-        console.log(`Inserting ${tags.length} tags for food entry ${foodEntryId}`);
-        for (const tagName of tags) {
+    if (tagArray && tagArray.length > 0) {
+        console.log(`Inserting ${tagArray.length} tags for food entry ${foodEntryId}`);
+        for (const tagName of tagArray) {
             // Get tag_id
             const [tagRows] = await dbConnection.execute('SELECT id FROM tags WHERE name = ?', [tagName]);
             if (tagRows.length > 0) {
@@ -106,9 +128,9 @@ app.post('/food-entries/create', async function(req,res){
     }
 
     // Insert categories into junction table
-    if (categories && Array.isArray(categories)) {
-        console.log(`Inserting ${categories.length} categories for food entry ${foodEntryId}`);
-        for (const categoryName of categories) {
+    if (categoryArray && categoryArray.length > 0) {
+        console.log(`Inserting ${categoryArray.length} categories for food entry ${foodEntryId}`);
+        for (const categoryName of categoryArray) {
             // Get category_id
             const [categoryRows] = await dbConnection.execute('SELECT id FROM categories WHERE name = ?', [categoryName]);
             if (categoryRows.length > 0) {
@@ -170,6 +192,14 @@ app.get('/food-entries/delete/:foodRecordID', async function(req,res){
 app.post('/food-entries/edit/:foodRecordID', async function(req,res){
     const foodEntryID = req.params.foodRecordID;
     console.log(`POST /food-entries/edit/${foodEntryID} - Updating food entry`);
+    console.log('Edit data:', req.body);
+    
+    // Normalize tags and categories to arrays
+    const tagArray = Array.isArray(req.body.tags) ? req.body.tags : (req.body.tags ? [req.body.tags] : []);
+    const categoryArray = Array.isArray(req.body.categories) ? req.body.categories : (req.body.categories ? [req.body.categories] : []);
+    
+    console.log('Normalized edit tags:', tagArray);
+    console.log('Normalized edit categories:', categoryArray);
     const sql = `UPDATE food_entries SET dateTime=?,
                         foodName=?,
                         calories=?,
@@ -196,9 +226,9 @@ app.post('/food-entries/edit/:foodRecordID', async function(req,res){
     await dbConnection.execute('DELETE FROM food_entries_tags WHERE food_entry_id = ?', [foodEntryID]);
 
     // Insert new tags
-    if (req.body.tags && Array.isArray(req.body.tags)) {
-        console.log(`Updating tags: ${req.body.tags.join(', ')}`);
-        for (const tagName of req.body.tags) {
+    if (tagArray && tagArray.length > 0) {
+        console.log(`Updating tags: ${tagArray.join(', ')}`);
+        for (const tagName of tagArray) {
             const [tagRows] = await dbConnection.execute('SELECT id FROM tags WHERE name = ?', [tagName]);
             if (tagRows.length > 0) {
                 const tagId = tagRows[0].id;
@@ -211,9 +241,9 @@ app.post('/food-entries/edit/:foodRecordID', async function(req,res){
     await dbConnection.execute('DELETE FROM food_entries_categories WHERE food_entry_id = ?', [foodEntryID]);
 
     // Insert new categories
-    if (req.body.categories && Array.isArray(req.body.categories)) {
-        console.log(`Updating categories: ${req.body.categories.join(', ')}`);
-        for (const categoryName of req.body.categories) {
+    if (categoryArray && categoryArray.length > 0) {
+        console.log(`Updating categories: ${categoryArray.join(', ')}`);
+        for (const categoryName of categoryArray) {
             const [categoryRows] = await dbConnection.execute('SELECT id FROM categories WHERE name = ?', [categoryName]);
             if (categoryRows.length > 0) {
                 const categoryId = categoryRows[0].id;
