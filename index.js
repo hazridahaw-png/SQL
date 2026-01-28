@@ -1,10 +1,6 @@
 const express = require("express");
 // mysql2 is a NodeJS client to do CRUD with MySQL/MariaDB
 const mysql2 = require("mysql2/promise");
-// ejs is embedded JavaScript (is a way to create templates for a dynamic web app)
-// a template file is a reusable HTML code which express can
-// send back to the client
-const ejs = require("ejs");
 require('dotenv').config({ path: './SQL/.env' });
 
 console.log("Application starting...");
@@ -37,8 +33,8 @@ const dbConfig = {
 // and in times of low traffic
 const dbConnection = mysql2.createPool(dbConfig);
 
-app.get('/food-entries', async function(req, res){
-    console.log('GET /food-entries - Fetching all food entries');
+app.get('/daily-dose', async function(req, res){
+    console.log('GET /daily-dose - Fetching all eats entries');
     const search = req.query.search;
     console.log('Search term:', search);
     let sql = `
@@ -69,7 +65,7 @@ app.get('/food-entries', async function(req, res){
         row.categories = row.categories ? row.categories.split(',') : [];
     });
    
-    console.log(`Found ${rows.length} food entries`);
+    console.log(`Found ${rows.length} eats entries`);
     res.render('food_entries', {
         foodEntries: rows,
         search: search
@@ -78,7 +74,7 @@ app.get('/food-entries', async function(req, res){
 })
 
 // display the form
-app.get("/food-entries/create", async function(req,res){
+app.get("/daily-dose/create", async function(req,res){
     const [tags] = await dbConnection.execute('SELECT * FROM tags');
     const [categories] = await dbConnection.execute('SELECT * FROM categories');
     const [foods] = await dbConnection.execute('SELECT * FROM foods ORDER BY name');
@@ -92,8 +88,8 @@ app.get("/food-entries/create", async function(req,res){
 })
 
 // process the form
-app.post('/food-entries/create', async function(req,res){
-    console.log('POST /food-entries/create - Creating new food entry');
+app.post('/daily-dose/create', async function(req,res){
+    console.log('POST /daily-dose/create - Creating new eats entry');
     const { dateTime, foodName, calories, servingSize, meal, tags, unit, description, categories} = req.body;
     console.log('Received data:', { dateTime, foodName, calories, servingSize, meal, tags, unit, description, categories });
     console.log('Tags type:', Array.isArray(tags) ? 'array' : typeof tags);
@@ -112,7 +108,6 @@ app.post('/food-entries/create', async function(req,res){
     console.log(values);
     const results = await dbConnection.execute(sql, values);
     const foodEntryId = results[0].insertId;
-    console.log(results);
 
     // Insert tags into junction table
     if (tagArray && tagArray.length > 0) {
@@ -140,13 +135,13 @@ app.post('/food-entries/create', async function(req,res){
         }
     }
 
-    console.log('Food entry created successfully');
-    res.redirect('/food-entries')
+    console.log('Eats entry created successfully');
+    res.redirect('/daily-dose')
 })
 
-app.get('/food-entries/edit/:foodRecordID', async function(req,res){
+app.get('/daily-dose/edit/:foodRecordID', async function(req,res){
     const foodRecordID = req.params.foodRecordID;
-    console.log(`GET /food-entries/edit/${foodRecordID} - Fetching food entry for editing`);
+    console.log(`GET /daily-dose/edit/${foodRecordID} - Fetching eats entry for editing`);
     const [foodEntries] = await dbConnection.execute(`
         SELECT fe.*, 
                GROUP_CONCAT(DISTINCT t.name) as tags,
@@ -168,7 +163,7 @@ app.get('/food-entries/edit/:foodRecordID', async function(req,res){
     const [allFoods] = await dbConnection.execute('SELECT * FROM foods ORDER BY name');
     const [allUnits] = await dbConnection.execute('SELECT * FROM units ORDER BY name');
     
-    console.log('Food entry data:', foodEntry);
+    console.log('Eats entry data:', foodEntry);
     res.render('edit_food_entries',{
         foodEntry,
         tags: allTags,
@@ -179,7 +174,7 @@ app.get('/food-entries/edit/:foodRecordID', async function(req,res){
 })
 
 // display the confirmation form
-app.get('/food-entries/delete/:foodRecordID', async function(req,res){
+app.get('/daily-dose/delete/:foodRecordID', async function(req,res){
     const foodRecordID = req.params.foodRecordID;
     const sql = "SELECT * FROM food_entries WHERE id = ?";
     const [foodEntries] = await dbConnection.execute(sql, [foodRecordID] );
@@ -189,9 +184,9 @@ app.get('/food-entries/delete/:foodRecordID', async function(req,res){
     })
 });
 
-app.post('/food-entries/edit/:foodRecordID', async function(req,res){
+app.post('/daily-dose/edit/:foodRecordID', async function(req,res){
     const foodEntryID = req.params.foodRecordID;
-    console.log(`POST /food-entries/edit/${foodEntryID} - Updating food entry`);
+    console.log(`POST /daily-dose/edit/${foodEntryID} - Updating eats entry`);
     console.log('Edit data:', req.body);
     
     // Normalize tags and categories to arrays
@@ -220,7 +215,7 @@ app.post('/food-entries/edit/:foodRecordID', async function(req,res){
     ];
     console.log(bindings);
     
-    const results = await dbConnection.execute(sql, bindings)
+    await dbConnection.execute(sql, bindings)
 
     // Delete old tags
     await dbConnection.execute('DELETE FROM food_entries_tags WHERE food_entry_id = ?', [foodEntryID]);
@@ -252,20 +247,134 @@ app.post('/food-entries/edit/:foodRecordID', async function(req,res){
         }
     }
 
-    console.log('Food entry updated successfully');
-    res.redirect('/food-entries')
+    console.log('Eats entry updated successfully');
+    res.redirect('/daily-dose')
 })
 
 // process the delete
-app.post('/food-entries/delete/:foodRecordID', async function(req,res){
+app.post('/daily-dose/delete/:foodRecordID', async function(req,res){
     const foodID = req.params.foodRecordID;
-    console.log(`POST /food-entries/delete/${foodID} - Deleting food entry`);
+    console.log(`POST /daily-dose/delete/${foodID} - Deleting eats entry`);
     const sql = `DELETE FROM food_entries WHERE id = ?;`
-    const results = await dbConnection.execute(sql, [foodID]);
-    console.log('Food entry deleted successfully');
-    res.redirect('/food-entries')
+    await dbConnection.execute(sql, [foodID]);
+    console.log('Eats entry deleted successfully');
+    res.redirect('/daily-dose')
 })
 
-app.listen(port, () => {
+// Mood readings routes
+app.get('/mood-readings', async function(req, res){
+    console.log('GET /mood-readings - Fetching all mood readings');
+    const [rows] = await dbConnection.execute('SELECT * FROM mood_readings ORDER BY date DESC');
+    console.log(`Found ${rows.length} mood readings`);
+    res.render('mood_readings', {
+        moodReadings: rows
+    });
+});
+
+app.get('/mood-readings/create', function(req, res){
+    res.render('create_mood_readings');
+});
+
+app.post('/mood-readings/create', async function(req, res){
+    console.log('POST /mood-readings/create - Creating new mood reading');
+    const { date, mood_level, notes } = req.body;
+    await dbConnection.execute('INSERT INTO mood_readings (date, mood_level, notes) VALUES (?, ?, ?)', [date, mood_level, notes]);
+    console.log('Mood reading created successfully');
+    res.redirect('/mood-readings');
+});
+
+app.get('/mood-readings/edit/:id', async function(req, res){
+    const id = req.params.id;
+    const [rows] = await dbConnection.execute('SELECT * FROM mood_readings WHERE id = ?', [id]);
+    const moodReading = rows[0];
+    res.render('edit_mood_readings', { moodReading });
+});
+
+app.post('/mood-readings/edit/:id', async function(req, res){
+    const id = req.params.id;
+    const { date, mood_level, notes } = req.body;
+    await dbConnection.execute('UPDATE mood_readings SET date = ?, mood_level = ?, notes = ? WHERE id = ?', [date, mood_level, notes, id]);
+    console.log('Mood reading updated successfully');
+    res.redirect('/mood-readings');
+});
+
+app.get('/mood-readings/delete/:id', async function(req, res){
+    const id = req.params.id;
+    const [rows] = await dbConnection.execute('SELECT * FROM mood_readings WHERE id = ?', [id]);
+    const moodReading = rows[0];
+    res.render('confirm_delete_mood', { moodReading });
+});
+
+app.post('/mood-readings/delete/:id', async function(req, res){
+    const id = req.params.id;
+    await dbConnection.execute('DELETE FROM mood_readings WHERE id = ?', [id]);
+    console.log('Mood reading deleted successfully');
+    res.redirect('/mood-readings');
+});
+
+// Books routes
+app.get('/books', async function(req, res){
+    console.log('GET /books - Fetching all books');
+    const [rows] = await dbConnection.execute(`
+        SELECT b.*, bt.name as book_type
+        FROM books b
+        LEFT JOIN book_types bt ON b.book_type_id = bt.id
+        ORDER BY b.date_added DESC
+    `);
+    console.log(`Found ${rows.length} books`);
+    res.render('books', {
+        books: rows
+    });
+});
+
+app.get('/books/create', async function(req, res){
+    const [bookTypes] = await dbConnection.execute('SELECT * FROM book_types ORDER BY name');
+    res.render('create_books', { bookTypes });
+});
+
+app.post('/books/create', async function(req, res){
+    console.log('POST /books/create - Creating new book');
+    const { title, author, book_type_id } = req.body;
+    await dbConnection.execute('INSERT INTO books (title, author, book_type_id) VALUES (?, ?, ?)', [title, author, book_type_id || null]);
+    console.log('Book created successfully');
+    res.redirect('/books');
+});
+
+app.get('/books/edit/:id', async function(req, res){
+    const id = req.params.id;
+    const [books] = await dbConnection.execute('SELECT * FROM books WHERE id = ?', [id]);
+    const book = books[0];
+    const [bookTypes] = await dbConnection.execute('SELECT * FROM book_types ORDER BY name');
+    res.render('edit_books', { book, bookTypes });
+});
+
+app.post('/books/edit/:id', async function(req, res){
+    const id = req.params.id;
+    const { title, author, book_type_id } = req.body;
+    await dbConnection.execute('UPDATE books SET title = ?, author = ?, book_type_id = ? WHERE id = ?', [title, author, book_type_id || null, id]);
+    console.log('Book updated successfully');
+    res.redirect('/books');
+});
+
+app.get('/books/delete/:id', async function(req, res){
+    const id = req.params.id;
+    const [books] = await dbConnection.execute(`
+        SELECT b.*, bt.name as book_type
+        FROM books b
+        LEFT JOIN book_types bt ON b.book_type_id = bt.id
+        WHERE b.id = ?
+    `, [id]);
+    const book = books[0];
+    res.render('confirm_delete_book', { book });
+});
+
+app.post('/books/delete/:id', async function(req, res){
+    const id = req.params.id;
+    await dbConnection.execute('DELETE FROM books WHERE id = ?', [id]);
+    console.log('Book deleted successfully');
+    res.redirect('/books');
+});
+
+app.listen(port, '0.0.0.0', () => {
     console.log(`Server running at http://localhost:${port}`);
 });
